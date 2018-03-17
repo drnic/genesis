@@ -4655,29 +4655,29 @@ sub {
 
 	explain "\nGenerating new CI YAML Template #C{$name}...";
 
-	target_vault($options{vault});
+	# target_vault($options{vault});
 
-	explain "#Y{Setting Common Configuration}\n#Y{----------------------------}";
+	# explain "#Y{Setting Common Configuration}\n#Y{----------------------------}";
 
-	$pipeline{name} = prompt_for_line(clean_heredoc(<<"	|EOF"), undef, basename(getcwd));
-	|Please provide the name of you pipeline as you'd like it to appear in Concourse
-	|EOF
+	# $pipeline{name} = prompt_for_line(clean_heredoc(<<"	|EOF"), undef, basename(getcwd));
+	# |Please provide the name of you pipeline as you'd like it to appear in Concourse
+	# |EOF
 
-	$pipeline{public} = prompt_for_boolean(clean_heredoc(<<"	|EOF"),0);
-	|Would you like to make the Concourse pipeline (and all logs related to deployments) public?
-	|EOF
+	# $pipeline{public} = prompt_for_boolean(clean_heredoc(<<"	|EOF"),0);
+	# |Would you like to make the Concourse pipeline (and all logs related to deployments) public?
+	# |EOF
 
-	$pipeline{tagged} = prompt_for_boolean(clean_heredoc(<<"	|EOF"),0);
-	|Would you like to use tags on each job (If unsure, choose no)?
-	|EOF
+	# $pipeline{tagged} = prompt_for_boolean(clean_heredoc(<<"	|EOF"),0);
+	# |Would you like to use tags on each job (If unsure, choose no)?
+	# |EOF
 
-	$pipeline{debug} = prompt_for_boolean(clean_heredoc(<<"	|EOF"),0);
-	|Would you like to have debug output on BOSH jobs?
-	|EOF
+	# $pipeline{debug} = prompt_for_boolean(clean_heredoc(<<"	|EOF"),0);
+	# |Would you like to have debug output on BOSH jobs?
+	# |EOF
 
-	$pipeline{skip_upkeep} = prompt_for_boolean(clean_heredoc(<<"	|EOF"), 0, "invert");
-	|Would you like to automatically keep your stemcells up to date?
-	|EOF
+	# $pipeline{skip_upkeep} = prompt_for_boolean(clean_heredoc(<<"	|EOF"), 0, "invert");
+	# |Would you like to automatically keep your stemcells up to date?
+	# |EOF
 
 	my %chosen_envs;
 	($pipeline{boshes},$pipeline{stemcells},%chosen_envs) = prompt_for_boshes_and_stemcells_for(!$pipeline{skip_upkeep}, %envs);
@@ -5019,6 +5019,16 @@ sub prompt_for_boshes_and_stemcells_for {
 			# Found in .bosh/config (either alias or url)
 			$boshenvs{$env}{url} = $bosh_info{url};
 			explain "\nUsing BOSH director at #C{$boshenvs{$env}{url}}";
+		} elsif ($ENV{BOSH_ENVIRONMENT} and $ENV{BOSH_CA_CERT} and
+						 $ENV{BOSH_CLIENT} and $ENV{BOSH_CLIENT_SECRET} and 
+						 $ENV{BOSH_ENVIRONMENT} eq $env) {
+			$boshenvs{$env}{url} = $env;
+			$boshenvs{$env}{url} = "https://$boshenvs{$env}{url}" unless $boshenvs{$env}{url} =~ m/^https/;
+			$boshenvs{$env}{url} .= ":25555" unless $boshenvs{$env}{url} =~ m/:\d+$/;
+			$boshenvs{$env}{raw_username} = $ENV{BOSH_CLIENT};
+			$boshenvs{$env}{raw_password} = $ENV{BOSH_CLIENT_SECRET};
+			$boshenvs{$env}{raw_ca_cert}  = $ENV{BOSH_CA_CERT};
+			explain "\nUsing BOSH director $boshenvs{$env}{url} from \$BOSH_ENVIRONMENT";
 		} else {
 			# Not found -- need info
 			if (is_valid_uri($envs{$e}{bosh})) {
@@ -5030,7 +5040,7 @@ sub prompt_for_boshes_and_stemcells_for {
 			}
 		}
 
-		$boshenvs{$env}{username} = prompt_for_line(
+		$boshenvs{$env}{username} ||= prompt_for_line(
 			undef,
 			"Concourse Username",
 			"concourse "
@@ -5059,9 +5069,9 @@ sub prompt_for_boshes_and_stemcells_for {
 		my ($stemcells, %candidates) = ([]);
 		if ($ask_stemcells) {
 			explain "\nFetching stemcells from BOSH...";
-			chomp(local $ENV{BOSH_CA_CERT} = qx(safe get "$boshenvs{$env}{ca_cert}"));
+			chomp(local $ENV{BOSH_CA_CERT} = system_execute("safe get $boshenvs{$env}{ca_cert}"));
 			local $ENV{BOSH_CLIENT} = $boshenvs{$env}{username};
-			chomp(local $ENV{BOSH_CLIENT_SECRET} = qx(safe get "$boshenvs{$env}{password}"));
+			chomp(local $ENV{BOSH_CLIENT_SECRET} = system_execute("safe get $boshenvs{$env}{password}"));
 			my $sc_info = qx_bosh("-e $boshenvs{$env}{url} stemcells");
 			if ($? > 0) {
 				# Couldn't get stemcells - ask for them manually (just die for now)
